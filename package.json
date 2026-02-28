@@ -1,0 +1,21 @@
+{
+  "name": "clawcommand",
+  "private": true,
+  "description": "OpenClaw Control Dashboard",
+  "engines": {
+    "node": ">=18.17.0"
+  },
+  "workspaces": [
+    "packages/*"
+  ],
+  "scripts": {
+    "build": "npm run build -w @clawcommand/shared && npm run build -w @clawcommand/parser && npm run build -w @clawcommand/scanner && npm run build -w @clawcommand/api",
+    "build:all": "npm run build && npm run build -w @clawcommand/dashboard",
+    "test": "npm run test -w @clawcommand/parser && npm run test -w @clawcommand/api",
+    "test:ci": "npm run test -- --reporter=verbose",
+    "scanner": "node packages/scanner/dist/cli.js",
+    "api": "node packages/api/dist/index.js",
+    "dev:api": "tsx watch packages/api/src/index.ts",
+    "dev:dashboard": "npm run dev -w @clawcommand/dashboard"
+  }
+}

@@ -1,0 +1,26 @@
+---
+description: ClawCommand project context and conventions
+alwaysApply: true
+---
+
+# ClawCommand Project
+
+OpenClaw Control Dashboard — file-scanner first, optional runtime control.
+
+## Context
+
+- **Phase 1:** Read-only scanner (`openclaw-scan`), snapshot upload, dashboard with inventory, validation, policy, patches
+- **Phase 2:** Optional Node Agent daemon for live orchestration
+- **Monorepo:** `packages/scanner`, `packages/api`, `packages/dashboard`
+
+## Key Conventions
+
+- Scanner is read-only: no shell execution, no remote control, no secret extraction
+- Every issue links to evidence (file + line) and recommended fix
+- Always show "Based on scan at <timestamp>"
+- Distinguish static state (scanner) vs live state (daemon)
+
+## Reference
+
+- Full plan: `docs/PROJECT_PLAN.md`
+- Architecture: `docs/ARCHITECTURE.md`
