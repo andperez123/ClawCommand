@@ -9,13 +9,17 @@
     "packages/*"
   ],
   "scripts": {
+    "setup": "npm install --no-audit --no-fund && npm run build",
     "build": "npm run build -w @clawcommand/shared && npm run build -w @clawcommand/parser && npm run build -w @clawcommand/scanner && npm run build -w @clawcommand/api",
     "build:all": "npm run build && npm run build -w @clawcommand/dashboard",
     "test": "npm run test -w @clawcommand/parser && npm run test -w @clawcommand/api",
     "test:ci": "npm run test -- --reporter=verbose",
+    "scan": "node packages/scanner/dist/cli.js",
+    "scan:upload": "node packages/scanner/dist/cli.js --token dev",
     "scanner": "node packages/scanner/dist/cli.js",
     "api": "node packages/api/dist/index.js",
     "dev:api": "tsx watch packages/api/src/index.ts",
-    "dev:dashboard": "npm run dev -w @clawcommand/dashboard"
+    "dev:dashboard": "npm run dev -w @clawcommand/dashboard",
+    "quickstart": "npm run setup && npm run scan"
   }
 }

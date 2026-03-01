@@ -100,87 +100,78 @@ packages/
 
 ## 5. Live Testing on an OpenClaw Agent
 
-### Option A: Quickest — Local All-in-One (5 minutes)
+### Option A: One Command (30 seconds)
 
-Run everything on the same machine where your OpenClaw agent lives:
+Scan your workspace with zero setup — the `./scan` script handles everything:
 
 ```bash
-# 1. Clone and build
 git clone <repo-url> && cd ClawCommand
-npm install
-npm run build
-
-# 2. Start the API (Terminal 1)
-npm run api
-# → Listening on http://localhost:4000
-
-# 3. Start the Dashboard (Terminal 2)
-npm run dev:dashboard
-# → Dashboard at http://localhost:3000
-
-# 4. Run a scan (Terminal 3)
-node packages/scanner/dist/cli.js --token dev
-# → Snapshot uploaded to API
-
-# 5. Open http://localhost:3000 and explore
+./scan -p /path/to/your/workspace
 ```
 
-The scanner auto-discovers your OpenClaw workspace by checking:
-- `~/.openclaw/openclaw.json`
-- `.cursor/` (current directory and home)
-- `~/.cursor/`
+The `./scan` script auto-installs dependencies and builds on first run. A snapshot JSON is saved to the current directory.
 
-### Option B: Docker (self-contained, good for persistence)
+### Option B: Full Dashboard (5 minutes)
+
+See scan results in a web UI with inventory, validation, policy checks, and diffs:
 
 ```bash
-# 1. Copy .env.example to .env and set your token
+# 1. Clone and setup
+git clone <repo-url> && cd ClawCommand
+npm run setup
+
+# 2. Start API (Terminal 1)
+npm run api
+
+# 3. Start Dashboard (Terminal 2)
+npm run dev:dashboard
+
+# 4. Scan and upload (Terminal 3)
+npm run scan:upload
+# or: ./scan -t dev
+
+# 5. Open http://localhost:3000
+```
+
+The `dev` token works automatically in non-production mode.
+
+### Option C: Docker (self-contained, persistent)
+
+```bash
 cp .env.example .env
 # Edit CLAWCOMMAND_TOKENS in .env
 
-# 2. Start
 docker compose up -d
 # → API + Dashboard on http://localhost:4000
 
-# 3. Scan from the host machine
-node packages/scanner/dist/cli.js --token <your-token>
-# Or use the bundle:
-npm run build -w @clawcommand/scanner
-npx -w @clawcommand/scanner openclaw-scan --token <your-token>
+./scan -t <your-token>
 ```
 
-### Option C: Remote Agent Scanning (scan a Pi / server / VM)
+### Option D: Remote Agent Scanning (Pi / server / VM)
 
 ```bash
-# 1. Build the standalone scanner bundle
-cd packages/scanner && npm run bundle && cd ../..
+# Build the standalone bundle
+npm run bundle -w @clawcommand/scanner
 
-# 2. Scan a remote host (requires SSH access + Node.js on remote)
+# Scan a remote host (requires SSH + Node.js on remote)
 ./scripts/scan-remote.sh pi@192.168.1.50 /home/pi/my-project
-# → Saves snapshot-pi-192-168-1-50-20260228-143022.json locally
 
-# 3. Upload snapshot to your API
+# Upload the saved snapshot
 curl -X POST http://localhost:4000/api/scans \
   -H "Authorization: Bearer dev" \
   -H "Content-Type: application/json" \
-  -d @snapshot-pi-192-168-1-50-20260228-143022.json
+  -d @snapshot-*.json
 ```
 
-### Option D: Deploy to Fly.io (public URL)
+### Option E: Deploy to Fly.io (public URL)
 
 ```bash
-# 1. Install flyctl if needed
-curl -L https://fly.io/install.sh | sh
-
-# 2. Launch (first time)
 fly launch --copy-config --no-deploy
 fly secrets set CLAWCOMMAND_TOKENS="your-secure-token"
 fly deploy
 
-# 3. Scan from any machine
-node packages/scanner/dist/cli.js \
-  --token your-secure-token \
-  --path /path/to/workspace
-# Set CLAWCOMMAND_API_URL=https://clawcommand.fly.dev before running
+# Scan from any machine
+CLAWCOMMAND_API_URL=https://your-app.fly.dev ./scan -t your-secure-token
 ```
 
 ---
@@ -232,50 +223,38 @@ Every issue links back to evidence (file path + entity) with a recommended fix.
 ## 9. Quick Reference — All Commands
 
 ```bash
-# Build everything
-npm run build
+# ─── One-command scan ────────────────────────────────
+./scan                                 # Scan cwd, save snapshot
+./scan -p /path/to/workspace           # Scan specific directory
+./scan -t dev                          # Scan + upload to local API
+./scan -e snapshot.json                # Scan + save to named file
+./scan --include-runs                  # Include run history
+./scan --json                          # Raw JSON to stdout (for piping)
 
-# Build everything including dashboard static export
-npm run build:all
+# ─── npm scripts ─────────────────────────────────────
+npm run setup                          # Install + build everything
+npm run scan                           # Scan cwd
+npm run scan:upload                    # Scan + upload (dev token)
 
-# Run tests (parser + API)
-npm test
+# ─── Build & test ────────────────────────────────────
+npm run build                          # Build all packages
+npm run build:all                      # Build all + dashboard export
+npm test                               # Run parser + API tests
 
-# Start API server (port 4000)
-npm run api
+# ─── Servers ─────────────────────────────────────────
+npm run api                            # Start API (port 4000)
+npm run dev:api                        # API in dev mode (auto-reload)
+npm run dev:dashboard                  # Dashboard dev (port 3000)
 
-# Start API in dev mode (auto-reload)
-npm run dev:api
+# ─── Advanced ────────────────────────────────────────
+npm run bundle -w @clawcommand/scanner # Build standalone bundle
+./scripts/scan-remote.sh user@host     # Remote scan via SSH
 
-# Start dashboard dev server (port 3000)
-npm run dev:dashboard
-
-# Run scanner (upload to API)
-node packages/scanner/dist/cli.js --token dev
-
-# Run scanner (export to file)
-node packages/scanner/dist/cli.js --export snapshot.json
-
-# Run scanner on specific path
-node packages/scanner/dist/cli.js --path /home/user/project --token dev
-
-# Include run history in scan
-node packages/scanner/dist/cli.js --token dev --include-runs
-
-# Build standalone scanner bundle
-npm run bundle -w @clawcommand/scanner
-
-# Remote scan via SSH
-./scripts/scan-remote.sh user@host [/workspace/path]
-
-# Docker
+# ─── Docker / Fly.io ────────────────────────────────
 docker compose up -d
 docker compose down
-
-# Fly.io
 fly deploy
 fly secrets set CLAWCOMMAND_TOKENS="token"
-fly logs
 ```
 
 ---

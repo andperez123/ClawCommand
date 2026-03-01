@@ -13,3 +13,5 @@ out/
 __pycache__/
 .venv/
 venv/
+clawcommand-scan-*.json
+snapshot-*.json
