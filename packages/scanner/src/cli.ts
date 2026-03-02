@@ -71,6 +71,7 @@ function printSummary(snapshot: Snapshot, exportPath?: string, uploadedId?: stri
   const agents = snapshot.agents.length;
   const skills = snapshot.skills.length;
   const mcpServers = snapshot.mcpServers.length;
+  const rules = snapshot.rules?.length ?? 0;
   const runs = snapshot.runs?.length ?? 0;
 
   out.write(`  ${c.bold}Discovered:${c.reset}\n`);
@@ -95,9 +96,44 @@ function printSummary(snapshot: Snapshot, exportPath?: string, uploadedId?: stri
   }
   out.write("\n");
 
+  out.write(`    ${icon(rules)} ${c.bold}${rules}${c.reset} rule${rules !== 1 ? "s" : ""}`);
+  if (rules > 0 && rules <= 8 && snapshot.rules) {
+    const names = snapshot.rules.map((r) => r.name).join(", ");
+    out.write(` ${c.dim}(${names})${c.reset}`);
+  }
+  out.write("\n");
+
   if (runs > 0) {
     const succeeded = snapshot.runs!.filter((r) => r.success).length;
     out.write(`    ${icon(runs)} ${c.bold}${runs}${c.reset} run${runs !== 1 ? "s" : ""} ${c.dim}(${succeeded} succeeded)${c.reset}\n`);
+  }
+
+  // Agent detail
+  if (agents > 0) {
+    out.write(`\n  ${c.bold}Agent Details:${c.reset}\n`);
+    for (const a of snapshot.agents) {
+      out.write(`    ${c.cyan}▸${c.reset} ${c.bold}${a.name}${c.reset}`);
+      if (a.description) out.write(` ${c.dim}— ${a.description.slice(0, 80)}${c.reset}`);
+      out.write("\n");
+      if (a.sourcePath) out.write(`      Source: ${c.dim}${a.sourcePath}${c.reset}\n`);
+      if (a.sections && a.sections.length > 0) out.write(`      Sections: ${c.dim}${a.sections.join(", ")}${c.reset}\n`);
+      if (a.skills && a.skills.length > 0) out.write(`      Skills: ${c.dim}${a.skills.join(", ")}${c.reset}\n`);
+      if (a.mcpDependencies.length > 0) out.write(`      MCP deps: ${c.dim}${a.mcpDependencies.join(", ")}${c.reset}\n`);
+      if (a.instructions) out.write(`      Instructions: ${c.green}${a.instructions.length} chars${c.reset}\n`);
+    }
+  }
+
+  // MCP detail
+  if (mcpServers > 0) {
+    out.write(`\n  ${c.bold}MCP Server Details:${c.reset}\n`);
+    for (const m of snapshot.mcpServers) {
+      out.write(`    ${c.cyan}▸${c.reset} ${c.bold}${m.name}${c.reset}`);
+      if (m.transport) out.write(` ${c.dim}(${m.transport})${c.reset}`);
+      out.write("\n");
+      if (m.command) out.write(`      Command: ${c.dim}${m.command}${m.args ? " " + m.args.join(" ") : ""}${c.reset}\n`);
+      if (m.url) out.write(`      URL: ${c.dim}${m.url}${c.reset}\n`);
+      if (m.envKeys && m.envKeys.length > 0) out.write(`      Env: ${c.dim}${m.envKeys.join(", ")}${c.reset}\n`);
+    }
   }
 
   // Warnings

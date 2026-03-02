@@ -3,6 +3,7 @@ export type {
   AgentRecord,
   SkillRecord,
   McpServerRecord,
+  RuleRecord,
   RunRecord,
   ValidationEvidence,
   ValidationIssue,

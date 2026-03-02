@@ -1,13 +1,13 @@
 "use client";
 
 import { useState } from "react";
-import type { SkillRecord } from "@clawcommand/shared";
+import type { RuleRecord } from "@clawcommand/shared";
 
 interface Props {
-  skills: SkillRecord[];
+  rules: RuleRecord[];
 }
 
-export function SkillsList({ skills }: Props) {
+export function RulesList({ rules }: Props) {
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const toggle = (id: string) =>
     setExpanded((prev) => {
@@ -19,40 +19,37 @@ export function SkillsList({ skills }: Props) {
   return (
     <div>
       <h2 className="text-sm font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-2">
-        Skills ({skills.length})
+        Rules ({rules.length})
       </h2>
       <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg divide-y divide-gray-100 dark:divide-gray-800">
-        {skills.length === 0 ? (
-          <div className="px-4 py-3 text-sm text-gray-400 dark:text-gray-500">No skills discovered</div>
+        {rules.length === 0 ? (
+          <div className="px-4 py-3 text-sm text-gray-400 dark:text-gray-500">No rules found</div>
         ) : (
-          skills.map((s) => {
-            const isOpen = expanded.has(s.id);
+          rules.map((r) => {
+            const isOpen = expanded.has(r.id);
             return (
-              <div key={s.id}>
+              <div key={r.id}>
                 <button
-                  onClick={() => toggle(s.id)}
+                  onClick={() => toggle(r.id)}
                   className="w-full px-4 py-3 flex justify-between items-center text-left hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors"
                 >
                   <div className="min-w-0">
-                    <span className="text-gray-900 dark:text-gray-100">{s.name}</span>
-                    {s.description && (
+                    <span className="text-gray-900 dark:text-gray-100">{r.name}</span>
+                    {r.description && (
                       <span className="block text-xs text-gray-500 dark:text-gray-400 truncate mt-0.5">
-                        {s.description}
+                        {r.description}
                       </span>
                     )}
                   </div>
-                  <div className="flex items-center gap-2">
-                    <span className="text-xs text-gray-500 dark:text-gray-400">
-                      {s.version ?? "no version"}
-                    </span>
-                    {s.pinned && (
+                  <div className="flex items-center gap-2 shrink-0">
+                    {r.alwaysApply && (
                       <span className="text-xs px-2 py-0.5 rounded bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300">
-                        pinned
+                        always
                       </span>
                     )}
-                    {!s.pinned && !s.version && (
-                      <span className="text-xs px-2 py-0.5 rounded bg-amber-100 text-amber-700 dark:bg-amber-900 dark:text-amber-300">
-                        unpinned
+                    {r.globs && r.globs.length > 0 && (
+                      <span className="text-xs px-2 py-0.5 rounded bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300">
+                        {r.globs.length} glob{r.globs.length !== 1 ? "s" : ""}
                       </span>
                     )}
                     <svg
@@ -66,26 +63,26 @@ export function SkillsList({ skills }: Props) {
 
                 {isOpen && (
                   <div className="px-4 pb-4 space-y-3 border-t border-gray-100 dark:border-gray-800">
-                    {s.sourcePath && (
+                    {r.sourcePath && (
                       <DetailRow label="Source">
-                        <span className="text-xs text-gray-500 dark:text-gray-400 font-mono">{s.sourcePath}</span>
+                        <span className="text-xs text-gray-500 dark:text-gray-400 font-mono">{r.sourcePath}</span>
                       </DetailRow>
                     )}
-                    {s.files && s.files.length > 0 && (
-                      <DetailRow label={`Files (${s.files.length})`}>
+                    {r.globs && r.globs.length > 0 && (
+                      <DetailRow label="Glob Patterns">
                         <div className="flex flex-wrap gap-1">
-                          {s.files.map((f) => (
-                            <span key={f} className="text-xs px-2 py-0.5 rounded bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300 font-mono">
-                              {f}
+                          {r.globs.map((g) => (
+                            <span key={g} className="text-xs px-2 py-0.5 rounded bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300 font-mono">
+                              {g}
                             </span>
                           ))}
                         </div>
                       </DetailRow>
                     )}
-                    {s.instructions && (
-                      <DetailRow label={`Instructions (${s.instructions.length} chars)`}>
+                    {r.content && (
+                      <DetailRow label={`Content (${r.content.length} chars)`}>
                         <pre className="text-xs text-gray-600 dark:text-gray-300 bg-gray-50 dark:bg-gray-800 rounded p-3 max-h-64 overflow-auto whitespace-pre-wrap font-mono">
-                          {s.instructions}
+                          {r.content}
                         </pre>
                       </DetailRow>
                     )}

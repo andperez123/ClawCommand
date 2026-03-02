@@ -8,6 +8,7 @@ import { ScanSidebar } from "../components/ScanSidebar";
 import { AgentsList } from "../components/AgentsList";
 import { SkillsList } from "../components/SkillsList";
 import { McpServersList } from "../components/McpServersList";
+import { RulesList } from "../components/RulesList";
 import { ValidationPanel } from "../components/ValidationPanel";
 import { PolicyPanel } from "../components/PolicyPanel";
 import { RunsHistory } from "../components/RunsHistory";
@@ -150,6 +151,9 @@ export default function Home() {
                 <AgentsList agents={selectedScan.agents} />
                 <SkillsList skills={selectedScan.skills} />
                 <McpServersList servers={selectedScan.mcpServers} />
+                {selectedScan.rules && selectedScan.rules.length > 0 && (
+                  <RulesList rules={selectedScan.rules} />
+                )}
                 {selectedScan.validation && (
                   <ValidationPanel validation={selectedScan.validation} />
                 )}

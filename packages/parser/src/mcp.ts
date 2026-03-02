@@ -7,8 +7,11 @@ export interface ParsedMcpServer {
   command?: string;
   args?: string[];
   env?: Record<string, unknown>;
+  envKeys?: string[];
   toolCount: number;
   authConfigured: boolean;
+  transport?: string;
+  url?: string;
   config: Record<string, unknown>;
 }
 
@@ -33,13 +36,31 @@ export function parseMcpConfig(content: string): ParsedMcpServer[] {
         ? (c.args.filter((x): x is string => typeof x === "string") as string[])
         : undefined;
 
+      const envObj = typeof c.env === "object" && c.env !== null ? (c.env as Record<string, unknown>) : undefined;
+      const envKeys = envObj ? Object.keys(envObj) : undefined;
+
+      const transport = typeof c.transport === "string"
+        ? c.transport
+        : command ? "stdio" : typeof c.url === "string" ? "sse" : undefined;
+
+      const url = typeof c.url === "string" ? c.url : undefined;
+
+      const toolCount = Array.isArray(c.tools)
+        ? c.tools.length
+        : typeof c.toolCount === "number"
+          ? c.toolCount as number
+          : 0;
+
       servers.push({
         name,
         command,
         args,
-        env: typeof c.env === "object" ? (c.env as Record<string, unknown>) : undefined,
-        toolCount: 0, // Filled by tool schema parser when available
+        env: envObj,
+        envKeys,
+        toolCount,
         authConfigured: !!hasAuth,
+        transport,
+        url,
         config: c,
       });
     }

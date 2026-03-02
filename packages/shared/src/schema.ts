@@ -10,6 +10,7 @@ export interface Snapshot {
   agents: AgentRecord[];
   skills: SkillRecord[];
   mcpServers: McpServerRecord[];
+  rules?: RuleRecord[];
   runs?: RunRecord[];
 }
 
@@ -21,7 +22,11 @@ export interface AgentRecord {
   lastRun?: string; // ISO8601
   lastErrorSignature?: string;
   skillCount: number;
+  skills?: string[];
   mcpDependencies: string[];
+  instructions?: string; // full body content from AGENTS.md / config
+  sections?: string[]; // H2-level headings found in agent config
+  description?: string;
   config?: Record<string, unknown>; // sanitized, no secrets
 }
 
@@ -32,6 +37,9 @@ export interface SkillRecord {
   sourcePath: string;
   pinned: boolean;
   policyApproved?: boolean;
+  description?: string;
+  instructions?: string; // body content below frontmatter
+  files?: string[]; // other files in the skill directory
 }
 
 export interface McpServerRecord {
@@ -41,6 +49,21 @@ export interface McpServerRecord {
   validConfig: boolean;
   toolCount: number;
   authConfigured: boolean; // presence only, never value
+  command?: string;
+  args?: string[];
+  envKeys?: string[]; // env variable names only, never values
+  transport?: string; // stdio, sse, streamable-http
+  url?: string;
+}
+
+export interface RuleRecord {
+  id: string;
+  name: string;
+  sourcePath: string;
+  description?: string;
+  content: string; // full rule body
+  alwaysApply?: boolean;
+  globs?: string[];
 }
 
 export interface RunRecord {

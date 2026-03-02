@@ -3,19 +3,30 @@ import { parseAgentFromAgentsMd, parseAgentFromJson, parseAgentsFromOpenClawConf
 
 describe("parseAgentFromAgentsMd", () => {
   it("extracts agent name from heading", () => {
-    expect(parseAgentFromAgentsMd("# My Agent\nSome instructions")).toEqual({ name: "My Agent" });
+    const result = parseAgentFromAgentsMd("# My Agent\nSome instructions");
+    expect(result.name).toBe("My Agent");
+    expect(result.instructions).toBe("Some instructions");
+    expect(result.description).toBe("Some instructions");
   });
 
   it("returns default when no heading found", () => {
-    expect(parseAgentFromAgentsMd("no heading here")).toEqual({ name: "default" });
+    const result = parseAgentFromAgentsMd("no heading here");
+    expect(result.name).toBe("default");
+    expect(result.instructions).toBe("no heading here");
   });
 
   it("trims whitespace from name", () => {
-    expect(parseAgentFromAgentsMd("#   Padded Name  ")).toEqual({ name: "Padded Name" });
+    expect(parseAgentFromAgentsMd("#   Padded Name  ").name).toBe("Padded Name");
   });
 
   it("handles empty content", () => {
-    expect(parseAgentFromAgentsMd("")).toEqual({ name: "default" });
+    expect(parseAgentFromAgentsMd("").name).toBe("default");
+  });
+
+  it("extracts sections from H2 headings", () => {
+    const content = "# Agent\n## Setup\nsetup info\n## Usage\nusage info";
+    const result = parseAgentFromAgentsMd(content);
+    expect(result.sections).toEqual(["Setup", "Usage"]);
   });
 });
 

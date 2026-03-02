@@ -12,7 +12,11 @@ const agentRecordSchema = z.object({
   lastRun: z.string().optional(),
   lastErrorSignature: z.string().optional(),
   skillCount: z.number().int().nonnegative().optional(),
+  skills: z.array(z.string()).optional(),
   mcpDependencies: z.array(z.string()).optional(),
+  instructions: z.string().optional(),
+  sections: z.array(z.string()).optional(),
+  description: z.string().optional(),
   config: z.record(z.string(), z.unknown()).optional(),
 });
 
@@ -23,6 +27,9 @@ const skillRecordSchema = z.object({
   sourcePath: z.string().optional(),
   pinned: z.boolean().optional(),
   policyApproved: z.boolean().optional(),
+  description: z.string().optional(),
+  instructions: z.string().optional(),
+  files: z.array(z.string()).optional(),
 });
 
 const mcpServerRecordSchema = z.object({
@@ -32,6 +39,21 @@ const mcpServerRecordSchema = z.object({
   validConfig: z.boolean().optional(),
   toolCount: z.number().int().nonnegative().optional(),
   authConfigured: z.boolean().optional(),
+  command: z.string().optional(),
+  args: z.array(z.string()).optional(),
+  envKeys: z.array(z.string()).optional(),
+  transport: z.string().optional(),
+  url: z.string().optional(),
+});
+
+const ruleRecordSchema = z.object({
+  id: z.string().optional(),
+  name: z.string().min(1),
+  sourcePath: z.string().optional(),
+  description: z.string().optional(),
+  content: z.string(),
+  alwaysApply: z.boolean().optional(),
+  globs: z.array(z.string()).optional(),
 });
 
 const runRecordSchema = z.object({
@@ -50,6 +72,7 @@ export const snapshotSchema = z.object({
   agents: z.array(agentRecordSchema).default([]),
   skills: z.array(skillRecordSchema).default([]),
   mcpServers: z.array(mcpServerRecordSchema).default([]),
+  rules: z.array(ruleRecordSchema).optional(),
   runs: z.array(runRecordSchema).optional(),
 });
 

@@ -11,12 +11,11 @@ description: A useful skill
 # My Skill
 Instructions here`;
     const result = parseSkillManifest(content);
-    expect(result).toEqual({
-      name: "my-skill",
-      version: "1.2.0",
-      description: "A useful skill",
-      pinned: true,
-    });
+    expect(result.name).toBe("my-skill");
+    expect(result.version).toBe("1.2.0");
+    expect(result.description).toBe("A useful skill");
+    expect(result.pinned).toBe(true);
+    expect(result.instructions).toBe("# My Skill\nInstructions here");
   });
 
   it("sets pinned=true when version present", () => {
@@ -32,11 +31,16 @@ Instructions here`;
   });
 
   it("returns defaults when no frontmatter", () => {
-    expect(parseSkillManifest("Just markdown content")).toEqual({ pinned: false });
+    const result = parseSkillManifest("Just markdown content");
+    expect(result.pinned).toBe(false);
+    expect(result.instructions).toBe("Just markdown content");
+    expect(result.description).toBe("Just markdown content");
   });
 
   it("returns defaults for empty string", () => {
-    expect(parseSkillManifest("")).toEqual({ pinned: false });
+    const result = parseSkillManifest("");
+    expect(result.pinned).toBe(false);
+    expect(result.instructions).toBeUndefined();
   });
 
   it("handles name-only frontmatter", () => {

@@ -21,6 +21,11 @@ export {
 } from "./skill.js";
 
 export {
+  parseRule,
+  type ParsedRule,
+} from "./rule.js";
+
+export {
   parseRunFromLogLine,
   type ParsedRunRecord,
 } from "./run.js";

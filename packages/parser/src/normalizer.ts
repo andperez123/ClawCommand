@@ -7,6 +7,7 @@ import type {
   AgentRecord,
   SkillRecord,
   McpServerRecord,
+  RuleRecord,
   RunRecord,
 } from "@clawcommand/shared";
 import { slugify } from "@clawcommand/shared";
@@ -18,6 +19,7 @@ export function normalizeSnapshot(raw: Partial<Snapshot> & { scanId: string; tim
   const agents = (raw.agents ?? []).map(normalizeAgent);
   const skills = (raw.skills ?? []).map(normalizeSkill);
   const mcpServers = (raw.mcpServers ?? []).map(normalizeMcpServer);
+  const rules = (raw.rules ?? []).map(normalizeRule);
   const runs = (raw.runs ?? []).map(normalizeRun);
 
   return {
@@ -27,6 +29,7 @@ export function normalizeSnapshot(raw: Partial<Snapshot> & { scanId: string; tim
     agents,
     skills,
     mcpServers,
+    ...(rules.length > 0 ? { rules } : {}),
     ...(runs.length > 0 ? { runs } : {}),
   };
 }
@@ -41,7 +44,11 @@ function normalizeAgent(a: Partial<AgentRecord> & { name: string }): AgentRecord
     lastRun: a.lastRun,
     lastErrorSignature: a.lastErrorSignature,
     skillCount: a.skillCount ?? 0,
+    skills: a.skills,
     mcpDependencies: Array.isArray(a.mcpDependencies) ? a.mcpDependencies : [],
+    instructions: a.instructions,
+    sections: a.sections,
+    description: a.description,
     config: a.config,
   };
 }
@@ -57,6 +64,9 @@ function normalizeSkill(
     sourcePath: s.sourcePath ?? "",
     pinned: s.pinned ?? false,
     policyApproved: s.policyApproved,
+    description: s.description,
+    instructions: s.instructions,
+    files: s.files,
   };
 }
 
@@ -71,6 +81,26 @@ function normalizeMcpServer(
     validConfig: m.validConfig ?? true,
     toolCount: typeof m.toolCount === "number" ? m.toolCount : 0,
     authConfigured: m.authConfigured ?? false,
+    command: m.command,
+    args: m.args,
+    envKeys: m.envKeys,
+    transport: m.transport,
+    url: m.url,
+  };
+}
+
+function normalizeRule(
+  r: Partial<RuleRecord> & { name: string; content: string }
+): RuleRecord {
+  const id = r.id ?? `rule-${slugify(r.name)}`;
+  return {
+    id,
+    name: r.name,
+    sourcePath: r.sourcePath ?? "",
+    description: r.description,
+    content: r.content,
+    alwaysApply: r.alwaysApply,
+    globs: r.globs,
   };
 }
 

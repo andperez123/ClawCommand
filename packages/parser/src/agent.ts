@@ -6,15 +6,35 @@ export interface ParsedAgentConfig {
   name: string;
   skills?: string[];
   mcpDependencies?: string[];
+  instructions?: string;
+  sections?: string[];
+  description?: string;
   config?: Record<string, unknown>;
 }
 
 /**
- * Parse agent name and hints from AGENTS.md
+ * Parse agent metadata from AGENTS.md — extracts name, full body, section headings, and description
  */
-export function parseAgentFromAgentsMd(content: string): { name: string } {
-  const m = content.match(/^#\s+(.+)$/m);
-  return { name: m ? m[1].trim() : "default" };
+export function parseAgentFromAgentsMd(content: string): ParsedAgentConfig {
+  const h1Match = content.match(/^#\s+(.+)$/m);
+  const name = h1Match ? h1Match[1].trim() : "default";
+
+  const sections = [...content.matchAll(/^##\s+(.+)$/gm)].map((m) => m[1].trim());
+
+  const body = content.replace(/^#\s+.+$/m, "").trim();
+  const instructions = body || undefined;
+
+  const firstParagraph = body.match(/^[^#\n].+/m)?.[0]?.trim();
+  const description = firstParagraph && firstParagraph.length <= 300
+    ? firstParagraph
+    : firstParagraph?.slice(0, 300);
+
+  return {
+    name,
+    instructions,
+    sections: sections.length > 0 ? sections : undefined,
+    description,
+  };
 }
 
 /**
@@ -33,11 +53,21 @@ export function parseAgentFromJson(
 
     const skills = extractStringArray(data, "skills", "skill");
     const mcp = extractStringArray(data, "mcp", "mcpServers", "mcpDependencies");
+    const description = typeof data.description === "string" ? data.description : undefined;
+    const instructions = typeof data.instructions === "string"
+      ? data.instructions
+      : typeof data.systemPrompt === "string"
+        ? data.systemPrompt
+        : typeof data.prompt === "string"
+          ? data.prompt
+          : undefined;
 
     return {
       name: typeof name === "string" ? name : "default",
       skills: skills.length ? skills : undefined,
       mcpDependencies: mcp.length ? mcp : undefined,
+      description,
+      instructions,
       config: data,
     };
   } catch {
@@ -66,10 +96,18 @@ export function parseAgentsFromOpenClawConfig(
           const name = (obj.name as string) ?? (obj.id as string) ?? "default";
           const skills = extractStringArray(obj, "skills", "skill");
           const mcp = extractStringArray(obj, "mcp", "mcpServers", "mcpDependencies");
+          const description = typeof obj.description === "string" ? obj.description : undefined;
+          const instructions = typeof obj.instructions === "string"
+            ? obj.instructions
+            : typeof obj.systemPrompt === "string"
+              ? obj.systemPrompt
+              : undefined;
           return {
             name: typeof name === "string" ? name : "default",
             skills: skills.length ? skills : undefined,
             mcpDependencies: mcp.length ? mcp : undefined,
+            description,
+            instructions,
             config: obj,
           };
         }
