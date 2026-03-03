@@ -65,6 +65,59 @@ const runRecordSchema = z.object({
   summary: z.string().optional(),
 });
 
+const projectMetaSchema = z.object({
+  name: z.string(),
+  description: z.string().optional(),
+  version: z.string().optional(),
+  goals: z.array(z.string()).optional(),
+  scripts: z.record(z.string(), z.string()).optional(),
+  dependencies: z.number().optional(),
+  devDependencies: z.number().optional(),
+  readme: z.string().optional(),
+}).optional();
+
+const gitCommitSchema = z.object({
+  hash: z.string(),
+  author: z.string(),
+  date: z.string(),
+  message: z.string(),
+  filesChanged: z.number(),
+});
+
+const gitActivitySchema = z.object({
+  totalCommits: z.number(),
+  recentCommits: z.array(gitCommitSchema),
+  activeDays: z.number(),
+  topAuthors: z.array(z.object({ name: z.string(), commits: z.number() })),
+  firstCommitDate: z.string().optional(),
+  lastCommitDate: z.string().optional(),
+  filesChanged: z.array(z.string()),
+}).optional();
+
+const transcriptSessionSchema = z.object({
+  id: z.string(),
+  title: z.string().optional(),
+  timestamp: z.string(),
+  messageCount: z.number(),
+});
+
+const transcriptSummarySchema = z.object({
+  totalSessions: z.number(),
+  recentSessions: z.array(transcriptSessionSchema),
+  dateRange: z.object({ earliest: z.string(), latest: z.string() }).optional(),
+}).optional();
+
+const capabilitiesSummarySchema = z.object({
+  agentCount: z.number(),
+  skillCount: z.number(),
+  mcpServerCount: z.number(),
+  ruleCount: z.number(),
+  totalTools: z.number(),
+  summary: z.string(),
+  agentSkillMap: z.array(z.object({ agent: z.string(), skills: z.array(z.string()) })),
+  agentMcpMap: z.array(z.object({ agent: z.string(), mcpServers: z.array(z.string()) })),
+}).optional();
+
 export const snapshotSchema = z.object({
   scanId: z.uuid(),
   timestamp: z.string().min(1),
@@ -74,6 +127,10 @@ export const snapshotSchema = z.object({
   mcpServers: z.array(mcpServerRecordSchema).default([]),
   rules: z.array(ruleRecordSchema).optional(),
   runs: z.array(runRecordSchema).optional(),
+  projectMeta: projectMetaSchema,
+  gitActivity: gitActivitySchema,
+  transcriptSummary: transcriptSummarySchema,
+  capabilities: capabilitiesSummarySchema,
 });
 
 export const diffQuerySchema = z.object({

@@ -3,15 +3,15 @@ import "./globals.css";
 
 export const metadata: Metadata = {
   title: "ClawCommand",
-  description: "OpenClaw Control Dashboard",
+  description: "OpenClaw Control Dashboard — Configuration Intelligence & Compliance",
 };
 
 export default function RootLayout({
   children,
 }: Readonly<{ children: React.ReactNode }>) {
   return (
-    <html lang="en" className="dark:bg-gray-950">
-      <body className="antialiased min-h-screen bg-white dark:bg-gray-950 text-gray-900 dark:text-gray-100">
+    <html lang="en" suppressHydrationWarning>
+      <body className="antialiased min-h-screen bg-slate-50 dark:bg-gray-950 text-slate-900 dark:text-slate-100">
         {children}
       </body>
     </html>

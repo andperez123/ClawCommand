@@ -12,6 +12,63 @@ export interface Snapshot {
   mcpServers: McpServerRecord[];
   rules?: RuleRecord[];
   runs?: RunRecord[];
+  projectMeta?: ProjectMeta;
+  gitActivity?: GitActivity;
+  transcriptSummary?: TranscriptSummary;
+  capabilities?: CapabilitiesSummary;
+}
+
+export interface ProjectMeta {
+  name: string;
+  description?: string;
+  version?: string;
+  goals?: string[];
+  scripts?: Record<string, string>;
+  dependencies?: number;
+  devDependencies?: number;
+  readme?: string;
+}
+
+export interface GitCommit {
+  hash: string;
+  author: string;
+  date: string;
+  message: string;
+  filesChanged: number;
+}
+
+export interface GitActivity {
+  totalCommits: number;
+  recentCommits: GitCommit[];
+  activeDays: number;
+  topAuthors: { name: string; commits: number }[];
+  firstCommitDate?: string;
+  lastCommitDate?: string;
+  filesChanged: string[];
+}
+
+export interface TranscriptSession {
+  id: string;
+  title?: string;
+  timestamp: string;
+  messageCount: number;
+}
+
+export interface TranscriptSummary {
+  totalSessions: number;
+  recentSessions: TranscriptSession[];
+  dateRange?: { earliest: string; latest: string };
+}
+
+export interface CapabilitiesSummary {
+  agentCount: number;
+  skillCount: number;
+  mcpServerCount: number;
+  ruleCount: number;
+  totalTools: number;
+  summary: string;
+  agentSkillMap: { agent: string; skills: string[] }[];
+  agentMcpMap: { agent: string; mcpServers: string[] }[];
 }
 
 export interface AgentRecord {

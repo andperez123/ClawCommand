@@ -3,18 +3,47 @@
 @tailwind utilities;
 
 :root {
-  --foreground: #0a0a0a;
-  --background: #fafafa;
+  --foreground: #0f172a;
+  --background: #f8fafc;
+  --card: #ffffff;
+  --card-border: #e2e8f0;
+  --accent: #6366f1;
+  --accent-light: #e0e7ff;
+  --success: #10b981;
+  --warning: #f59e0b;
+  --danger: #ef4444;
 }
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --foreground: #ededed;
-    --background: #0a0a0a;
+    --foreground: #f1f5f9;
+    --background: #030712;
+    --card: #0f172a;
+    --card-border: #1e293b;
+    --accent: #818cf8;
+    --accent-light: #1e1b4b;
+    --success: #34d399;
+    --warning: #fbbf24;
+    --danger: #f87171;
   }
 }
 
 body {
   color: var(--foreground);
   background: var(--background);
+}
+
+@layer utilities {
+  .glass-card {
+    @apply bg-white/80 dark:bg-slate-900/80 backdrop-blur-sm border border-slate-200/60 dark:border-slate-700/60 rounded-xl shadow-sm;
+  }
+  .stat-card {
+    @apply relative overflow-hidden rounded-xl border border-slate-200/60 dark:border-slate-700/60 p-5 transition-all duration-200 hover:shadow-md hover:border-slate-300 dark:hover:border-slate-600;
+  }
+  .section-title {
+    @apply text-xs font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-500;
+  }
+  .gradient-text {
+    @apply bg-clip-text text-transparent bg-gradient-to-r;
+  }
 }

@@ -57,15 +57,32 @@ const c = {
 
 function printSummary(snapshot: Snapshot, exportPath?: string, uploadedId?: string) {
   const out = process.stderr;
-  const hr = `${c.dim}${"─".repeat(56)}${c.reset}`;
+  const hr = `${c.dim}${"─".repeat(60)}${c.reset}`;
+  const thinHr = `${c.dim}${"╌".repeat(60)}${c.reset}`;
 
   out.write(`\n${hr}\n`);
-  out.write(`${c.bold}${c.cyan}  ClawCommand Scan Results${c.reset}\n`);
+  out.write(`${c.bold}${c.cyan}  ⬡ ClawCommand — Complete Scan Results${c.reset}\n`);
   out.write(`${hr}\n\n`);
+
+  // Project info
+  if (snapshot.projectMeta) {
+    const pm = snapshot.projectMeta;
+    out.write(`  ${c.bold}${c.magenta}Project${c.reset}     ${pm.name}${pm.version ? ` ${c.dim}v${pm.version}${c.reset}` : ""}\n`);
+    if (pm.description) out.write(`  ${c.bold}About${c.reset}       ${c.dim}${pm.description}${c.reset}\n`);
+    if (pm.dependencies || pm.devDependencies) {
+      out.write(`  ${c.bold}Packages${c.reset}    ${c.dim}${pm.dependencies ?? 0} deps, ${pm.devDependencies ?? 0} devDeps${c.reset}\n`);
+    }
+  }
 
   out.write(`  ${c.bold}Workspace${c.reset}   ${snapshot.workspacePath}\n`);
   out.write(`  ${c.bold}Scan ID${c.reset}     ${c.dim}${snapshot.scanId}${c.reset}\n`);
-  out.write(`  ${c.bold}Timestamp${c.reset}   ${snapshot.timestamp}\n\n`);
+  out.write(`  ${c.bold}Timestamp${c.reset}   ${snapshot.timestamp}\n`);
+
+  // Capabilities summary
+  if (snapshot.capabilities) {
+    out.write(`\n  ${thinHr}\n`);
+    out.write(`  ${c.bold}${c.green}Capabilities:${c.reset} ${snapshot.capabilities.summary}\n`);
+  }
 
   // Inventory counts
   const agents = snapshot.agents.length;
@@ -74,7 +91,8 @@ function printSummary(snapshot: Snapshot, exportPath?: string, uploadedId?: stri
   const rules = snapshot.rules?.length ?? 0;
   const runs = snapshot.runs?.length ?? 0;
 
-  out.write(`  ${c.bold}Discovered:${c.reset}\n`);
+  out.write(`\n  ${thinHr}\n`);
+  out.write(`  ${c.bold}Discovered:${c.reset}\n\n`);
   out.write(`    ${icon(agents)} ${c.bold}${agents}${c.reset} agent${agents !== 1 ? "s" : ""}`);
   if (agents > 0) {
     const names = snapshot.agents.map((a) => a.name).join(", ");
@@ -108,11 +126,57 @@ function printSummary(snapshot: Snapshot, exportPath?: string, uploadedId?: stri
     out.write(`    ${icon(runs)} ${c.bold}${runs}${c.reset} run${runs !== 1 ? "s" : ""} ${c.dim}(${succeeded} succeeded)${c.reset}\n`);
   }
 
+  // Git activity
+  if (snapshot.gitActivity) {
+    const ga = snapshot.gitActivity;
+    out.write(`\n  ${thinHr}\n`);
+    out.write(`  ${c.bold}Git Activity:${c.reset}\n\n`);
+    out.write(`    ${c.bold}${ga.totalCommits}${c.reset} commits across ${c.bold}${ga.activeDays}${c.reset} active days\n`);
+    if (ga.topAuthors.length > 0) {
+      out.write(`    Top contributors: ${c.dim}${ga.topAuthors.map((a) => `${a.name} (${a.commits})`).join(", ")}${c.reset}\n`);
+    }
+    if (ga.lastCommitDate) {
+      out.write(`    Last commit: ${c.dim}${ga.lastCommitDate}${c.reset}\n`);
+    }
+    if (ga.recentCommits.length > 0) {
+      out.write(`\n    ${c.bold}Recent commits:${c.reset}\n`);
+      for (const cm of ga.recentCommits.slice(0, 8)) {
+        out.write(`      ${c.dim}${cm.hash}${c.reset} ${cm.message.slice(0, 60)}${cm.message.length > 60 ? "…" : ""}\n`);
+      }
+    }
+  }
+
+  // Transcript summary
+  if (snapshot.transcriptSummary) {
+    const ts = snapshot.transcriptSummary;
+    out.write(`\n  ${thinHr}\n`);
+    out.write(`  ${c.bold}Agent Sessions:${c.reset} ${c.bold}${ts.totalSessions}${c.reset} transcripts found\n`);
+    if (ts.dateRange) {
+      out.write(`    Range: ${c.dim}${ts.dateRange.earliest.slice(0, 10)} → ${ts.dateRange.latest.slice(0, 10)}${c.reset}\n`);
+    }
+    if (ts.recentSessions.length > 0) {
+      out.write(`\n    ${c.bold}Recent sessions:${c.reset}\n`);
+      for (const s of ts.recentSessions.slice(0, 5)) {
+        out.write(`      ${c.cyan}▸${c.reset} ${s.title ? s.title.slice(0, 60) : c.dim + "untitled" + c.reset} ${c.dim}(${s.messageCount} msgs)${c.reset}\n`);
+      }
+    }
+  }
+
+  // Project goals
+  if (snapshot.projectMeta?.goals && snapshot.projectMeta.goals.length > 0) {
+    out.write(`\n  ${thinHr}\n`);
+    out.write(`  ${c.bold}${c.magenta}Project Goals:${c.reset}\n`);
+    for (const g of snapshot.projectMeta.goals) {
+      out.write(`    ${c.magenta}▸${c.reset} ${g.slice(0, 80)}\n`);
+    }
+  }
+
   // Agent detail
   if (agents > 0) {
-    out.write(`\n  ${c.bold}Agent Details:${c.reset}\n`);
+    out.write(`\n  ${thinHr}\n`);
+    out.write(`  ${c.bold}Agent Details:${c.reset}\n`);
     for (const a of snapshot.agents) {
-      out.write(`    ${c.cyan}▸${c.reset} ${c.bold}${a.name}${c.reset}`);
+      out.write(`\n    ${c.cyan}▸${c.reset} ${c.bold}${a.name}${c.reset}`);
       if (a.description) out.write(` ${c.dim}— ${a.description.slice(0, 80)}${c.reset}`);
       out.write("\n");
       if (a.sourcePath) out.write(`      Source: ${c.dim}${a.sourcePath}${c.reset}\n`);
@@ -125,9 +189,10 @@ function printSummary(snapshot: Snapshot, exportPath?: string, uploadedId?: stri
 
   // MCP detail
   if (mcpServers > 0) {
-    out.write(`\n  ${c.bold}MCP Server Details:${c.reset}\n`);
+    out.write(`\n  ${thinHr}\n`);
+    out.write(`  ${c.bold}MCP Server Details:${c.reset}\n`);
     for (const m of snapshot.mcpServers) {
-      out.write(`    ${c.cyan}▸${c.reset} ${c.bold}${m.name}${c.reset}`);
+      out.write(`\n    ${c.cyan}▸${c.reset} ${c.bold}${m.name}${c.reset}`);
       if (m.transport) out.write(` ${c.dim}(${m.transport})${c.reset}`);
       out.write("\n");
       if (m.command) out.write(`      Command: ${c.dim}${m.command}${m.args ? " " + m.args.join(" ") : ""}${c.reset}\n`);
@@ -152,7 +217,8 @@ function printSummary(snapshot: Snapshot, exportPath?: string, uploadedId?: stri
   }
 
   if (warnings.length > 0) {
-    out.write(`\n  ${c.bold}${c.yellow}Heads up:${c.reset}\n`);
+    out.write(`\n  ${thinHr}\n`);
+    out.write(`  ${c.bold}${c.yellow}Heads up:${c.reset}\n`);
     for (const w of warnings) {
       out.write(`    ${c.yellow}⚠${c.reset}  ${w}\n`);
     }

@@ -31,6 +31,10 @@ export function normalizeSnapshot(raw: Partial<Snapshot> & { scanId: string; tim
     mcpServers,
     ...(rules.length > 0 ? { rules } : {}),
     ...(runs.length > 0 ? { runs } : {}),
+    ...(raw.projectMeta ? { projectMeta: raw.projectMeta } : {}),
+    ...(raw.gitActivity ? { gitActivity: raw.gitActivity } : {}),
+    ...(raw.transcriptSummary ? { transcriptSummary: raw.transcriptSummary } : {}),
+    ...(raw.capabilities ? { capabilities: raw.capabilities } : {}),
   };
 }
 

@@ -7,8 +7,12 @@
 import { readFile, readdir, stat } from "node:fs/promises";
 import { join, basename } from "node:path";
 import { homedir } from "node:os";
-import type { Snapshot, AgentRecord, SkillRecord, McpServerRecord, RuleRecord, RunRecord } from "@clawcommand/shared";
+import type {
+  Snapshot, AgentRecord, SkillRecord, McpServerRecord, RuleRecord, RunRecord,
+  ProjectMeta, GitActivity, GitCommit, TranscriptSummary, TranscriptSession, CapabilitiesSummary,
+} from "@clawcommand/shared";
 import { slugify } from "@clawcommand/shared";
+import { execFile } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import {
   parseAgentFromAgentsMd,
@@ -32,13 +36,18 @@ export async function createSnapshot(
   const scanId = randomUUID();
   const timestamp = new Date().toISOString();
 
-  const [agents, skills, mcpServers, rules, runs] = await Promise.all([
+  const [agents, skills, mcpServers, rules, runs, projectMeta, gitActivity, transcriptSummary] = await Promise.all([
     discoverAgents(workspacePath),
     discoverSkills(workspacePath),
     discoverMcpServers(workspacePath),
     discoverRules(workspacePath),
     options.includeRuns ? discoverRuns(workspacePath) : Promise.resolve([]),
+    discoverProjectMeta(workspacePath),
+    discoverGitActivity(workspacePath),
+    discoverTranscripts(workspacePath),
   ]);
+
+  const capabilities = buildCapabilities(agents, skills, mcpServers, rules);
 
   return normalizeSnapshot({
     scanId,
@@ -49,6 +58,10 @@ export async function createSnapshot(
     mcpServers,
     ...(rules.length > 0 ? { rules } : {}),
     ...(options.includeRuns && runs.length > 0 ? { runs } : {}),
+    ...(projectMeta ? { projectMeta } : {}),
+    ...(gitActivity ? { gitActivity } : {}),
+    ...(transcriptSummary ? { transcriptSummary } : {}),
+    capabilities,
   });
 }
 
@@ -390,6 +403,249 @@ async function discoverRuns(workspacePath: string): Promise<RunRecord[]> {
 
   runs.sort((a, b) => b.timestamp.localeCompare(a.timestamp));
   return runs.slice(0, 100);
+}
+
+// ── Project Meta Discovery ────────────────────────────────────────────
+
+async function discoverProjectMeta(workspacePath: string): Promise<ProjectMeta | null> {
+  try {
+    const pkgPath = join(workspacePath, "package.json");
+    const pkgContent = await safeReadFile(pkgPath);
+    let meta: ProjectMeta | null = null;
+
+    if (pkgContent) {
+      const pkg = JSON.parse(pkgContent);
+      meta = {
+        name: pkg.name ?? basename(workspacePath),
+        description: pkg.description,
+        version: pkg.version,
+        scripts: pkg.scripts ? Object.fromEntries(
+          Object.entries(pkg.scripts as Record<string, string>).slice(0, 30)
+        ) : undefined,
+        dependencies: pkg.dependencies ? Object.keys(pkg.dependencies).length : 0,
+        devDependencies: pkg.devDependencies ? Object.keys(pkg.devDependencies).length : 0,
+      };
+    } else {
+      meta = { name: basename(workspacePath) };
+    }
+
+    const readmePaths = ["README.md", "readme.md", "Readme.md"];
+    for (const p of readmePaths) {
+      const content = await safeReadFile(join(workspacePath, p));
+      if (content) {
+        meta.readme = content.slice(0, 4000);
+        const goals = extractGoals(content);
+        if (goals.length > 0) meta.goals = goals;
+        break;
+      }
+    }
+
+    return meta;
+  } catch {
+    return null;
+  }
+}
+
+function extractGoals(readme: string): string[] {
+  const goals: string[] = [];
+  const lines = readme.split(/\r?\n/);
+  let capturing = false;
+  for (const line of lines) {
+    if (/^#{1,3}\s.*(objective|goal|purpose|overview|about|what)/i.test(line)) {
+      capturing = true;
+      continue;
+    }
+    if (capturing && /^#{1,3}\s/.test(line)) break;
+    if (capturing) {
+      const trimmed = line.replace(/^[-*]\s*/, "").trim();
+      if (trimmed.length > 5) goals.push(trimmed);
+    }
+  }
+  return goals.slice(0, 10);
+}
+
+// ── Git Activity Discovery ────────────────────────────────────────────
+
+function execGit(args: string[], cwd: string): Promise<string> {
+  return new Promise((resolve) => {
+    execFile("git", args, { cwd, maxBuffer: 2 * 1024 * 1024, timeout: 10000 }, (err, stdout) => {
+      resolve(err ? "" : stdout.trim());
+    });
+  });
+}
+
+async function discoverGitActivity(workspacePath: string): Promise<GitActivity | null> {
+  try {
+    const isGit = await dirExists(join(workspacePath, ".git"));
+    if (!isGit) return null;
+
+    const logOutput = await execGit(
+      ["log", "--pretty=format:%H|%an|%aI|%s", "--numstat", "-50"],
+      workspacePath
+    );
+    if (!logOutput) return null;
+
+    const commits: GitCommit[] = [];
+    const allFiles = new Set<string>();
+    const authorCounts = new Map<string, number>();
+    const days = new Set<string>();
+
+    const blocks = logOutput.split(/\n(?=[0-9a-f]{40}\|)/);
+    for (const block of blocks) {
+      const lines = block.split("\n");
+      const headerLine = lines[0];
+      const parts = headerLine.split("|");
+      if (parts.length < 4) continue;
+
+      const [hash, author, date, ...msgParts] = parts;
+      const message = msgParts.join("|");
+
+      let filesChanged = 0;
+      for (let i = 1; i < lines.length; i++) {
+        const fLine = lines[i].trim();
+        if (!fLine) continue;
+        const fParts = fLine.split("\t");
+        if (fParts.length >= 3) {
+          filesChanged++;
+          allFiles.add(fParts[2]);
+        }
+      }
+
+      commits.push({ hash: hash.slice(0, 8), author, date, message, filesChanged });
+      authorCounts.set(author, (authorCounts.get(author) ?? 0) + 1);
+      days.add(date.slice(0, 10));
+    }
+
+    const topAuthors = [...authorCounts.entries()]
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 5)
+      .map(([name, count]) => ({ name, commits: count }));
+
+    return {
+      totalCommits: commits.length,
+      recentCommits: commits.slice(0, 20),
+      activeDays: days.size,
+      topAuthors,
+      firstCommitDate: commits.length > 0 ? commits[commits.length - 1].date : undefined,
+      lastCommitDate: commits.length > 0 ? commits[0].date : undefined,
+      filesChanged: [...allFiles].slice(0, 200),
+    };
+  } catch {
+    return null;
+  }
+}
+
+// ── Transcript Discovery ──────────────────────────────────────────────
+
+async function discoverTranscripts(workspacePath: string): Promise<TranscriptSummary | null> {
+  try {
+    const home = process.env.HOME ?? homedir();
+    const candidates = [
+      join(home, ".cursor", "projects"),
+    ];
+
+    const sessions: TranscriptSession[] = [];
+
+    for (const projDir of candidates) {
+      if (!(await dirExists(projDir))) continue;
+      try {
+        const projects = await readdir(projDir, { withFileTypes: true });
+        for (const proj of projects) {
+          if (!proj.isDirectory()) continue;
+          const transcriptsDir = join(projDir, proj.name, "agent-transcripts");
+          if (!(await dirExists(transcriptsDir))) continue;
+          const files = await readdir(transcriptsDir, { withFileTypes: true });
+          for (const f of files) {
+            if (!f.isFile() || !f.name.endsWith(".jsonl")) continue;
+            const filePath = join(transcriptsDir, f.name);
+            const fileStat = await stat(filePath).catch(() => null);
+            if (!fileStat) continue;
+
+            const id = f.name.replace(".jsonl", "");
+            let title: string | undefined;
+            let messageCount = 0;
+
+            const content = await safeReadFile(filePath);
+            if (content) {
+              const lines = content.split("\n").filter(Boolean);
+              messageCount = lines.length;
+              for (const line of lines.slice(0, 5)) {
+                try {
+                  const parsed = JSON.parse(line);
+                  if (parsed.type === "user" && parsed.message) {
+                    title = (parsed.message as string).slice(0, 100);
+                    break;
+                  }
+                  if (parsed.role === "user" && parsed.content) {
+                    title = (typeof parsed.content === "string" ? parsed.content : "").slice(0, 100);
+                    break;
+                  }
+                } catch { /* skip */ }
+              }
+            }
+
+            sessions.push({
+              id,
+              title,
+              timestamp: fileStat.mtime.toISOString(),
+              messageCount,
+            });
+          }
+        }
+      } catch { /* skip */ }
+    }
+
+    if (sessions.length === 0) return null;
+
+    sessions.sort((a, b) => b.timestamp.localeCompare(a.timestamp));
+    const earliest = sessions[sessions.length - 1].timestamp;
+    const latest = sessions[0].timestamp;
+
+    return {
+      totalSessions: sessions.length,
+      recentSessions: sessions.slice(0, 20),
+      dateRange: { earliest, latest },
+    };
+  } catch {
+    return null;
+  }
+}
+
+// ── Capabilities Builder ──────────────────────────────────────────────
+
+function buildCapabilities(
+  agents: AgentRecord[],
+  skills: SkillRecord[],
+  mcpServers: McpServerRecord[],
+  rules: RuleRecord[],
+): CapabilitiesSummary {
+  const totalTools = mcpServers.reduce((sum, m) => sum + m.toolCount, 0);
+
+  const agentSkillMap = agents
+    .filter((a) => a.skills && a.skills.length > 0)
+    .map((a) => ({ agent: a.name, skills: a.skills ?? [] }));
+
+  const agentMcpMap = agents
+    .filter((a) => a.mcpDependencies.length > 0)
+    .map((a) => ({ agent: a.name, mcpServers: a.mcpDependencies }));
+
+  const parts: string[] = [];
+  parts.push(`${agents.length} agent${agents.length !== 1 ? "s" : ""}`);
+  parts.push(`${skills.length} skill${skills.length !== 1 ? "s" : ""}`);
+  parts.push(`${mcpServers.length} MCP server${mcpServers.length !== 1 ? "s" : ""}`);
+  if (rules.length > 0) parts.push(`${rules.length} rule${rules.length !== 1 ? "s" : ""}`);
+  if (totalTools > 0) parts.push(`${totalTools} tool${totalTools !== 1 ? "s" : ""}`);
+
+  return {
+    agentCount: agents.length,
+    skillCount: skills.length,
+    mcpServerCount: mcpServers.length,
+    ruleCount: rules.length,
+    totalTools,
+    summary: `This environment has ${parts.join(", ")}`,
+    agentSkillMap,
+    agentMcpMap,
+  };
 }
 
 // ── Secret Sanitization ──────────────────────────────────────────────
