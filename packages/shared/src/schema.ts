@@ -16,6 +16,7 @@ export interface Snapshot {
   gitActivity?: GitActivity;
   transcriptSummary?: TranscriptSummary;
   capabilities?: CapabilitiesSummary;
+  audit?: AuditResult;
 }
 
 export interface ProjectMeta {
@@ -130,6 +131,37 @@ export interface RunRecord {
   success: boolean;
   errorSignature?: string;
   summary?: string;
+}
+
+// ── Workspace Audit ──────────────────────────────────────────────────
+
+export type AuditCategory = "identity" | "operations" | "memory" | "health" | "config";
+
+export interface WorkspaceFile {
+  path: string;
+  name: string;
+  category: AuditCategory;
+  exists: boolean;
+  sizeBytes?: number;
+  snippet?: string;
+}
+
+export interface AuditFinding {
+  id: string;
+  severity: "critical" | "high" | "medium" | "low" | "info";
+  category: AuditCategory;
+  file: string;
+  title: string;
+  description: string;
+  action: string;
+  evidence?: string;
+}
+
+export interface AuditResult {
+  findings: AuditFinding[];
+  files: WorkspaceFile[];
+  healthScore: number;
+  categoryScores: Record<AuditCategory, { score: number; total: number; passed: number }>;
 }
 
 export interface ValidationEvidence {

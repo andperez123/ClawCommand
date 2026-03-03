@@ -10,6 +10,7 @@ import { homedir } from "node:os";
 import type {
   Snapshot, AgentRecord, SkillRecord, McpServerRecord, RuleRecord, RunRecord,
   ProjectMeta, GitActivity, GitCommit, TranscriptSummary, TranscriptSession, CapabilitiesSummary,
+  AuditResult, AuditFinding, AuditCategory, WorkspaceFile,
 } from "@clawcommand/shared";
 import { slugify } from "@clawcommand/shared";
 import { execFile } from "node:child_process";
@@ -48,6 +49,7 @@ export async function createSnapshot(
   ]);
 
   const capabilities = buildCapabilities(agents, skills, mcpServers, rules);
+  const audit = await auditWorkspace(workspacePath, agents, skills, mcpServers);
 
   return normalizeSnapshot({
     scanId,
@@ -62,6 +64,7 @@ export async function createSnapshot(
     ...(gitActivity ? { gitActivity } : {}),
     ...(transcriptSummary ? { transcriptSummary } : {}),
     capabilities,
+    audit,
   });
 }
 
@@ -646,6 +649,306 @@ function buildCapabilities(
     agentSkillMap,
     agentMcpMap,
   };
+}
+
+// ── Workspace Audit Engine ────────────────────────────────────────────
+
+interface FileSpec {
+  name: string;
+  category: AuditCategory;
+  paths: string[];
+}
+
+async function auditWorkspace(
+  workspacePath: string,
+  agents: AgentRecord[],
+  skills: SkillRecord[],
+  mcpServers: McpServerRecord[],
+): Promise<AuditResult> {
+  const home = process.env.HOME ?? homedir();
+  const findings: AuditFinding[] = [];
+  const files: WorkspaceFile[] = [];
+  let findingIdx = 0;
+  const fid = () => `audit-${++findingIdx}`;
+
+  const fileSpecs: FileSpec[] = [
+    { name: "SOUL.md", category: "identity", paths: [join(workspacePath, "SOUL.md"), join(workspacePath, ".openclaw", "SOUL.md")] },
+    { name: "IDENTITY.md", category: "identity", paths: [join(workspacePath, "IDENTITY.md"), join(workspacePath, ".openclaw", "IDENTITY.md")] },
+    { name: "AGENTS.md", category: "operations", paths: [join(workspacePath, ".cursor", "AGENTS.md"), join(workspacePath, "AGENTS.md")] },
+    { name: "TOOLS.md", category: "operations", paths: [join(workspacePath, "TOOLS.md"), join(workspacePath, ".openclaw", "TOOLS.md")] },
+    { name: "MEMORY.md", category: "memory", paths: [join(workspacePath, "MEMORY.md"), join(workspacePath, ".openclaw", "MEMORY.md")] },
+    { name: "HEARTBEAT.md", category: "health", paths: [join(workspacePath, "HEARTBEAT.md"), join(workspacePath, ".openclaw", "HEARTBEAT.md")] },
+    { name: "openclaw.json", category: "config", paths: [join(workspacePath, "openclaw.json"), join(workspacePath, ".cursor", "openclaw.json"), join(home, ".openclaw", "openclaw.json")] },
+    { name: ".env", category: "config", paths: [join(workspacePath, ".env")] },
+    { name: ".gitignore", category: "config", paths: [join(workspacePath, ".gitignore")] },
+  ];
+
+  for (const spec of fileSpecs) {
+    let found = false;
+    for (const p of spec.paths) {
+      const content = await safeReadFile(p);
+      if (content !== null) {
+        const fileStat = await stat(p).catch(() => null);
+        files.push({
+          path: p,
+          name: spec.name,
+          category: spec.category,
+          exists: true,
+          sizeBytes: fileStat?.size ?? content.length,
+          snippet: content.slice(0, 200),
+        });
+        found = true;
+        break;
+      }
+    }
+    if (!found) {
+      files.push({ path: spec.paths[0], name: spec.name, category: spec.category, exists: false });
+    }
+  }
+
+  // Also check for memory/ daily logs
+  const memoryDir = join(workspacePath, "memory");
+  if (await dirExists(memoryDir)) {
+    try {
+      const entries = await readdir(memoryDir, { withFileTypes: true });
+      const mdFiles = entries.filter((e) => e.isFile() && e.name.endsWith(".md"));
+      for (const e of mdFiles.slice(0, 10)) {
+        const p = join(memoryDir, e.name);
+        const fileStat = await stat(p).catch(() => null);
+        files.push({
+          path: p, name: `memory/${e.name}`, category: "memory",
+          exists: true, sizeBytes: fileStat?.size,
+        });
+      }
+    } catch { /* skip */ }
+  }
+
+  // ── Run audits ──────────────────────────────────────────────────────
+
+  const getFile = (name: string) => files.find((f) => f.name === name);
+  const getContent = async (name: string) => {
+    const f = getFile(name);
+    return f?.exists ? await safeReadFile(f.path) : null;
+  };
+
+  // SOUL.md audit
+  const soulFile = getFile("SOUL.md");
+  if (!soulFile?.exists) {
+    findings.push({ id: fid(), severity: "medium", category: "identity", file: "SOUL.md",
+      title: "No SOUL.md found",
+      description: "Your agent has no behavioral core defined. Without SOUL.md, the agent has no explicit tone, ethics, or unbreakable rules — making it more susceptible to personality bleed and prompt injection.",
+      action: "Create SOUL.md with explicit behavioral constraints: tone, ethics, safety boundaries, and unbreakable rules." });
+  } else {
+    const soulContent = await getContent("SOUL.md");
+    if (soulContent) {
+      if (soulContent.length < 100) {
+        findings.push({ id: fid(), severity: "medium", category: "identity", file: "SOUL.md",
+          title: "SOUL.md is too sparse",
+          description: `Only ${soulContent.length} characters. Vague behavioral definitions lead to personality bleed — the agent may become too chatty, ignore safety constraints, or drift from intended behavior.`,
+          action: "Expand SOUL.md with specific rules: define tone (formal/casual), list prohibited behaviors, specify safety constraints explicitly." });
+      }
+      if (!/\b(never|must not|forbidden|prohibited|do not|don't)\b/i.test(soulContent)) {
+        findings.push({ id: fid(), severity: "low", category: "identity", file: "SOUL.md",
+          title: "No explicit prohibitions in SOUL.md",
+          description: "SOUL.md lacks clear negative constraints (words like 'never', 'must not', 'forbidden'). Without hard boundaries, the agent may interpret instructions loosely.",
+          action: "Add a 'Boundaries' section with explicit prohibitions: what the agent must NEVER do." });
+      }
+    }
+  }
+
+  // IDENTITY.md audit
+  const identityFile = getFile("IDENTITY.md");
+  if (!identityFile?.exists) {
+    findings.push({ id: fid(), severity: "low", category: "identity", file: "IDENTITY.md",
+      title: "No IDENTITY.md found",
+      description: "No explicit agent identity defined. The agent may default to a 'General Assistant' persona, which is more prone to prompt injection than a tightly-scoped role.",
+      action: "Create IDENTITY.md with: Name, Role (be specific — e.g. 'ReadOnly Data Analyst' not 'Assistant'), and Scope boundaries." });
+  } else {
+    const idContent = await getContent("IDENTITY.md");
+    if (idContent) {
+      if (/\b(general\s*assistant|helpful\s*assistant|ai\s*assistant)\b/i.test(idContent)) {
+        findings.push({ id: fid(), severity: "medium", category: "identity", file: "IDENTITY.md",
+          title: "Agent role is too generic",
+          description: "The identity uses a broad role like 'General Assistant'. Generic roles are significantly more prone to prompt injection because the agent accepts a wider range of instructions.",
+          action: "Narrow the role to a specific function: e.g. 'Backend Code Reviewer', 'DevOps Monitor', 'Security Audit Agent'.",
+          evidence: idContent.slice(0, 200) });
+      }
+    }
+  }
+
+  // AGENTS.md audit
+  const agentsContent = await getContent("AGENTS.md");
+  if (agentsContent) {
+    const lower = agentsContent.toLowerCase();
+    if (!/\b(ask\s*(first|before|permission)|confirm\s*before|approval\s*required|human.in.the.loop)\b/i.test(agentsContent)) {
+      findings.push({ id: fid(), severity: "high", category: "operations", file: "AGENTS.md",
+        title: "Missing 'Ask First' safety rule",
+        description: "AGENTS.md has no instruction requiring the agent to confirm before external data transmission. Without this, the agent could send data to email, Slack, webhooks, or APIs without your knowledge.",
+        action: "Add to AGENTS.md Safety section: 'Always confirm with the user before sending any data to external services (email, Slack, webhooks, APIs).'" });
+    }
+    if (!/\b(safety|security|boundaries|restrictions)\b/i.test(lower)) {
+      findings.push({ id: fid(), severity: "medium", category: "operations", file: "AGENTS.md",
+        title: "No Safety section in AGENTS.md",
+        description: "AGENTS.md has no dedicated safety or security section. The SOP should explicitly define operational boundaries.",
+        action: "Add a '## Safety' section that covers: data handling rules, external communication policy, file access boundaries." });
+    }
+    if (!/\b(external|internal)\b/i.test(lower)) {
+      findings.push({ id: fid(), severity: "low", category: "operations", file: "AGENTS.md",
+        title: "No External vs Internal distinction",
+        description: "AGENTS.md doesn't distinguish between external and internal actions. The agent needs clear boundaries on what can happen locally vs. what touches the network.",
+        action: "Add an 'External vs Internal' section defining which actions are local-only and which may contact external services." });
+    }
+  } else if (agents.length > 0) {
+    findings.push({ id: fid(), severity: "medium", category: "operations", file: "AGENTS.md",
+      title: "Agents exist but no AGENTS.md SOP",
+      description: `Found ${agents.length} agent(s) but no AGENTS.md to define their standard operating procedure. Without an SOP, agents run without structured guidelines.`,
+      action: "Create AGENTS.md with: session startup procedure, safety rules, external communication policy, and task boundaries." });
+  }
+
+  // TOOLS.md audit — check for hardcoded secrets
+  const toolsContent = await getContent("TOOLS.md");
+  if (toolsContent) {
+    const secretPatterns = [
+      { pattern: /(?:api[_-]?key|apikey)\s*[:=]\s*["']?[A-Za-z0-9_\-]{20,}/i, label: "API key" },
+      { pattern: /(?:password|passwd)\s*[:=]\s*["']?[^\s"']{8,}/i, label: "Password" },
+      { pattern: /(?:secret|token)\s*[:=]\s*["']?[A-Za-z0-9_\-]{20,}/i, label: "Secret/Token" },
+      { pattern: /(?:sk|pk)[-_][a-zA-Z0-9]{20,}/i, label: "API secret key (sk-/pk-)" },
+      { pattern: /(?:ghp|gho|ghu|ghs|ghr)_[A-Za-z0-9_]{30,}/i, label: "GitHub token" },
+      { pattern: /-----BEGIN\s+(RSA\s+)?PRIVATE\s+KEY-----/i, label: "Private key" },
+    ];
+    for (const { pattern, label } of secretPatterns) {
+      if (pattern.test(toolsContent)) {
+        findings.push({ id: fid(), severity: "critical", category: "operations", file: "TOOLS.md",
+          title: `Possible ${label} hardcoded in TOOLS.md`,
+          description: `TOOLS.md appears to contain a hardcoded ${label}. Secrets in plain-text files can be leaked through git history, agent context, or log files.`,
+          action: `Remove the ${label} from TOOLS.md immediately. Store secrets in .env or your system keychain, and reference them by variable name only.` });
+      }
+    }
+  }
+
+  // MEMORY.md audit
+  const memoryFile = getFile("MEMORY.md");
+  if (memoryFile?.exists) {
+    const memContent = await getContent("MEMORY.md");
+    if (memContent && memContent.length > 50000) {
+      findings.push({ id: fid(), severity: "medium", category: "memory", file: "MEMORY.md",
+        title: "MEMORY.md is very large",
+        description: `MEMORY.md is ${Math.round(memContent.length / 1024)}KB. Large memory files consume excessive tokens every session, increasing costs and reducing the context window available for actual work.`,
+        action: "Distill MEMORY.md to key decisions and preferences only. Move historical details to dated files in memory/ directory." });
+    }
+    if (/\b(main_session\s*:\s*false|group|channel|discord|slack)\b/i.test(memContent ?? "")) {
+      findings.push({ id: fid(), severity: "high", category: "memory", file: "MEMORY.md",
+        title: "MEMORY.md may be exposed to group contexts",
+        description: "MEMORY.md references group chats or non-main sessions. If loaded in shared contexts (Discord, Slack channels), your personal preferences and decisions could leak to other users.",
+        action: "Restrict MEMORY.md loading to main_session: true. Create separate, sanitized context files for group/channel interactions." });
+    }
+  }
+
+  // memory/ daily logs — context bloat check
+  const memoryLogs = files.filter((f) => f.name.startsWith("memory/") && f.exists);
+  for (const log of memoryLogs) {
+    if (log.sizeBytes && log.sizeBytes > 100 * 1024) {
+      findings.push({ id: fid(), severity: "medium", category: "memory", file: log.name,
+        title: `Daily log ${log.name} is bloated (${Math.round(log.sizeBytes / 1024)}KB)`,
+        description: "Daily memory logs over 100KB cause context bloat — the agent spends too many tokens reading them, increasing API costs and reducing effective context window.",
+        action: "Summarize this log file to under 100KB. Keep only key decisions and action items; archive verbose details separately." });
+    }
+  }
+
+  // HEARTBEAT.md audit
+  const heartbeatFile = getFile("HEARTBEAT.md");
+  if (heartbeatFile?.exists && heartbeatFile.sizeBytes) {
+    const hbContent = await getContent("HEARTBEAT.md");
+    if (hbContent && hbContent.length > 500) {
+      findings.push({ id: fid(), severity: "medium", category: "health", file: "HEARTBEAT.md",
+        title: `HEARTBEAT.md is too large (${hbContent.length} chars)`,
+        description: "HEARTBEAT.md should be under 500 characters. Since it's read every 15-30 minutes during heartbeat cycles, a large file will significantly increase your API costs.",
+        action: "Trim HEARTBEAT.md to essential checks only. Move complex logic to AGENTS.md and reference it, don't inline it." });
+    }
+  }
+
+  // openclaw.json audit — network exposure
+  const openclawContent = await getContent("openclaw.json");
+  if (openclawContent) {
+    try {
+      const cfg = JSON.parse(openclawContent);
+      if (cfg.bind === "0.0.0.0") {
+        findings.push({ id: fid(), severity: "critical", category: "config", file: "openclaw.json",
+          title: "Network binding on 0.0.0.0 — exposed to all interfaces",
+          description: "openclaw.json has bind: \"0.0.0.0\" which exposes the agent to all network interfaces, including public ones. Anyone on your network can reach this service.",
+          action: "Change bind to \"127.0.0.1\" in openclaw.json to restrict access to localhost only.",
+          evidence: "bind: \"0.0.0.0\"" });
+      }
+      if (cfg.auth === false || cfg.authentication === false) {
+        findings.push({ id: fid(), severity: "high", category: "config", file: "openclaw.json",
+          title: "Authentication is disabled",
+          description: "openclaw.json has authentication explicitly disabled. Anyone who can reach the service can control it.",
+          action: "Enable authentication in openclaw.json and set a strong token." });
+      }
+    } catch { /* not valid JSON, skip */ }
+  }
+
+  // .env in .gitignore check
+  const envFile = getFile(".env");
+  const gitignoreFile = getFile(".gitignore");
+  if (envFile?.exists) {
+    const gitignoreContent = gitignoreFile?.exists ? await getContent(".gitignore") : null;
+    if (!gitignoreContent || !gitignoreContent.includes(".env")) {
+      findings.push({ id: fid(), severity: "critical", category: "config", file: ".env",
+        title: ".env file exists but is NOT in .gitignore",
+        description: "Your .env file contains secrets (API keys, tokens, passwords). Without .gitignore protection, these will be committed to git and potentially pushed to a public repository.",
+        action: "Add .env to .gitignore immediately: echo '.env' >> .gitignore",
+        evidence: ".env found at: " + (envFile.path) });
+    }
+  }
+
+  // Skill version pinning (enhanced from policy engine)
+  const unpinnedSkills = skills.filter((s) => !s.pinned && !s.version);
+  if (unpinnedSkills.length > 0) {
+    findings.push({ id: fid(), severity: "medium", category: "health", file: "SKILL.md",
+      title: `${unpinnedSkills.length} unpinned skill${unpinnedSkills.length !== 1 ? "s" : ""} detected`,
+      description: `Skills without version pins are unstable and hard to audit over time. Unpinned: ${unpinnedSkills.map((s) => s.name).join(", ")}`,
+      action: "Add version: \"1.0.0\" to each SKILL.md frontmatter. Pin skills to specific versions for reproducibility." });
+  }
+
+  // MCP servers without auth
+  const noAuthMcp = mcpServers.filter((m) => m.validConfig && !m.authConfigured);
+  if (noAuthMcp.length > 0) {
+    findings.push({ id: fid(), severity: "medium", category: "config", file: "mcp.json",
+      title: `${noAuthMcp.length} MCP server${noAuthMcp.length !== 1 ? "s" : ""} without authentication`,
+      description: `Unauthenticated MCP servers: ${noAuthMcp.map((m) => m.name).join(", ")}. Without auth, any process on the machine can call these tool servers.`,
+      action: "Configure authentication (API key or token) for each MCP server in your mcp.json." });
+  }
+
+  // MCP servers with network exposure
+  for (const m of mcpServers) {
+    if (m.url && /0\.0\.0\.0/.test(m.url)) {
+      findings.push({ id: fid(), severity: "high", category: "config", file: m.sourcePath,
+        title: `MCP server "${m.name}" bound to 0.0.0.0`,
+        description: "This MCP server is exposed to all network interfaces. External hosts on your network could invoke its tools.",
+        action: `Change the URL for "${m.name}" to use 127.0.0.1 instead of 0.0.0.0.`,
+        evidence: m.url });
+    }
+  }
+
+  // ── Compute scores ──────────────────────────────────────────────────
+
+  const categories: AuditCategory[] = ["identity", "operations", "memory", "health", "config"];
+  const severityWeights: Record<string, number> = { critical: 25, high: 15, medium: 8, low: 3, info: 0 };
+
+  const categoryScores: Record<AuditCategory, { score: number; total: number; passed: number }> = {} as any;
+
+  for (const cat of categories) {
+    const catFindings = findings.filter((f) => f.category === cat);
+    const penalty = catFindings.reduce((sum, f) => sum + (severityWeights[f.severity] ?? 0), 0);
+    const score = Math.max(0, Math.min(100, 100 - penalty));
+    categoryScores[cat] = { score, total: catFindings.length, passed: catFindings.length === 0 ? 1 : 0 };
+  }
+
+  const totalPenalty = findings.reduce((sum, f) => sum + (severityWeights[f.severity] ?? 0), 0);
+  const healthScore = Math.max(0, Math.min(100, 100 - totalPenalty));
+
+  return { findings, files, healthScore, categoryScores };
 }
 
 // ── Secret Sanitization ──────────────────────────────────────────────

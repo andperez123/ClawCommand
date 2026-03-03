@@ -35,6 +35,7 @@ export function normalizeSnapshot(raw: Partial<Snapshot> & { scanId: string; tim
     ...(raw.gitActivity ? { gitActivity: raw.gitActivity } : {}),
     ...(raw.transcriptSummary ? { transcriptSummary: raw.transcriptSummary } : {}),
     ...(raw.capabilities ? { capabilities: raw.capabilities } : {}),
+    ...(raw.audit ? { audit: raw.audit } : {}),
   };
 }
 

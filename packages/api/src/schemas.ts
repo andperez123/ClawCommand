@@ -118,6 +118,39 @@ const capabilitiesSummarySchema = z.object({
   agentMcpMap: z.array(z.object({ agent: z.string(), mcpServers: z.array(z.string()) })),
 }).optional();
 
+const workspaceFileSchema = z.object({
+  path: z.string(),
+  name: z.string(),
+  category: z.enum(["identity", "operations", "memory", "health", "config"]),
+  exists: z.boolean(),
+  sizeBytes: z.number().optional(),
+  snippet: z.string().optional(),
+});
+
+const auditFindingSchema = z.object({
+  id: z.string(),
+  severity: z.enum(["critical", "high", "medium", "low", "info"]),
+  category: z.enum(["identity", "operations", "memory", "health", "config"]),
+  file: z.string(),
+  title: z.string(),
+  description: z.string(),
+  action: z.string(),
+  evidence: z.string().optional(),
+});
+
+const categoryScoreSchema = z.object({
+  score: z.number(),
+  total: z.number(),
+  passed: z.number(),
+});
+
+const auditResultSchema = z.object({
+  findings: z.array(auditFindingSchema),
+  files: z.array(workspaceFileSchema),
+  healthScore: z.number(),
+  categoryScores: z.record(z.string(), categoryScoreSchema),
+}).optional();
+
 export const snapshotSchema = z.object({
   scanId: z.uuid(),
   timestamp: z.string().min(1),
@@ -131,6 +164,7 @@ export const snapshotSchema = z.object({
   gitActivity: gitActivitySchema,
   transcriptSummary: transcriptSummarySchema,
   capabilities: capabilitiesSummarySchema,
+  audit: auditResultSchema,
 });
 
 export const diffQuerySchema = z.object({

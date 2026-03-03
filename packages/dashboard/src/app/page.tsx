@@ -16,6 +16,8 @@ import { ValidationPanel } from "../components/ValidationPanel";
 import { PolicyPanel } from "../components/PolicyPanel";
 import { RunsHistory } from "../components/RunsHistory";
 import { DiffView } from "../components/DiffView";
+import { AuditPanel } from "../components/AuditPanel";
+import { WorkspaceFiles } from "../components/WorkspaceFiles";
 
 type ViewMode = "inventory" | "diff";
 
@@ -152,6 +154,11 @@ export default function Home() {
                 {/* Hero overview with stat cards */}
                 <HeroOverview scan={selectedScan} />
 
+                {/* Workspace audit */}
+                {selectedScan.audit && (
+                  <AuditPanel audit={selectedScan.audit} />
+                )}
+
                 {/* Two-column layout for goals + activity */}
                 {(selectedScan.projectMeta?.goals?.length || selectedScan.gitActivity || selectedScan.transcriptSummary) && (
                   <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -175,6 +182,11 @@ export default function Home() {
 
                 {selectedScan.rules && selectedScan.rules.length > 0 && (
                   <RulesList rules={selectedScan.rules} />
+                )}
+
+                {/* Workspace files */}
+                {selectedScan.audit && selectedScan.audit.files.length > 0 && (
+                  <WorkspaceFiles files={selectedScan.audit.files} />
                 )}
 
                 {/* Validation & Policy */}
